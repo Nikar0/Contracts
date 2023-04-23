@@ -1,9 +1,10 @@
-/** Grim Finance POL feeRecipient. Comptroller for veNFT, Bribing, Voting & POL management.
+/** 
+Grim Finance POL feeRecipient. Comptroller for veNFT, Bribing, Voting & POL management.
+Version 1.0
 
-@author Nikar0 - https://www.github.com/nikar0
+@author Nikar0 - https://www.github.com/nikar0 - https://twitter.com/Nikar0_
 
-https://app.grim.finance
-
+https://app.grim.finance - https://twitter.com/FinanceGrim
 **/
 
 // SPDX-License-Identifier: MIT
@@ -22,6 +23,7 @@ import "./interfaces/IUniRouter.sol";
 import "./interfaces/ISolidlyRouter.sol";
 import "./interfaces/IVoter.sol";
 import "./interfaces/IBribe.sol";
+import "./interfaces/IVeDist.sol";
 import "./interfaces/IVeToken.sol";
 import "./interfaces/IGauge.sol";
 
@@ -40,8 +42,8 @@ contract GrimFeeRecipientPOL is Ownable {
     event IncreaseLockAmount(uint256 indexed amount, uint256 indexed timestamp);
     event ExtendLock(uint256 indexed lockTimeAdded, uint256 indexed timestamp);
     event TokenRebalance(address indexed from, address indexed to, uint256 amount);
-    event SetCustomUniPath(address[] indexed path, address indexed router);
-    event SetCustomSolidlyPath(ISolidlyRouter.Routes[] indexed path, address indexed router);
+    event SetCustomUniPath(address[] indexed path);
+    event SetCustomSolidlyPath(ISolidlyRouter.Routes[] indexed path);
     event StuckToken(address indexed stuckToken);
     event SetTreasury(address indexed newTreasury);
     event SetStrategist(address indexed newStrategist);
@@ -51,6 +53,7 @@ contract GrimFeeRecipientPOL is Ownable {
     event SetGauge(address indexed newGauge);
     event SetStableToken(address indexed newStableToken);
     event ExitToTreasury(uint256 indexed veNFTId);
+    event ExitToNewRecipient(uint256 indexed nftId, address indexed newFeeRecipient);
 
     //Tokens
     address public constant wftm = address(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
@@ -85,8 +88,6 @@ contract GrimFeeRecipientPOL is Ownable {
     uint256 public lastLock;
     uint256 public lastVote;
     uint256 public lastBribe;
-    bool public hasVoted;
-    bool public hasBribed;
     
 
     constructor ( 
@@ -103,19 +104,20 @@ contract GrimFeeRecipientPOL is Ownable {
     }
 
     //Setters//
-    function setSolidlyRouter(address _solidlyRouter) external onlyAdmin {
-        solidlyRouter = _solidlyRouter;
-        emit SetSolidlyRouter(_solidlyRouter);
+    function setSolidlyRouter(address _router) external onlyAdmin {
+        require(_router != solidlyRouter && _router != address(0), "Invalid Router");
+        solidlyRouter = _router;
+        emit SetSolidlyRouter(_router);
     }
 
     function setGauge(address _gauge) external onlyOwner {
-        require(_gauge != evoGauge, "Invalid Gauge");
+        require(_gauge != evoGauge && _gauge != address(0), "Invalid Gauge");
         evoGauge = _gauge;
         emit SetGauge(_gauge);
     }
 
     function setGrimVault(address _vault) external onlyOwner {
-        require(_vault != evoVault, "Invalid Vault");
+        require(_vault != evoVault && _vault != address(0), "Invalid Vault");
         evoVault = _vault;
         emit SetGrimVault(_vault);
     }
@@ -136,25 +138,18 @@ contract GrimFeeRecipientPOL is Ownable {
         emit SetStableToken(_token);
     }
 
-    function setCustomUniPath(address[] calldata _path, address _router) external onlyOwner {
+    function setCustomUniPath(address[] calldata _path) external onlyOwner {
         customUniPath = _path;
-        if(_router != unirouter){
-        unirouter = unirouter;
-        }
-        emit SetCustomUniPath(_path, _router);
+        emit SetCustomUniPath(_path);
     }
 
-    function setCustomSolidlyPath(ISolidlyRouter.Routes[] calldata _path, address _router) external onlyOwner {
+    function setCustomSolidlyPath(ISolidlyRouter.Routes[] calldata _path) external onlyOwner {
         delete customSolidlyPath;
 
         for (uint i; i < _path.length; ++i) {
         customSolidlyPath.push(_path[i]);
         }
-
-        if(_router != solidlyRouter){
-        unirouter = unirouter;
-        }
-        emit SetCustomSolidlyPath(_path, _router);
+        emit SetCustomSolidlyPath(_path);
     }
 
     
@@ -163,17 +158,17 @@ contract GrimFeeRecipientPOL is Ownable {
         require(_token != wftm, "Invalid token");
         require(_token != equal, "Invalid token");
         require(_token != grimEvo, "Invalid token");
+        require(_token != stableToken, "Invalid token");
 
         uint256 bal = IERC20(_token).balanceOf(address(this));
         IERC20(_token).safeTransfer(msg.sender, bal);
-
         emit StuckToken(_token);
     }
 
-    function approvalCheck(address spender, address token, uint256 amount) internal {
-        if (IERC20(token).allowance(spender, address(this)) < amount) {
-            IERC20(token).approve(spender, 0);
-            IERC20(token).approve(spender, type(uint256).max);
+    function approvalCheck(address _spender, address _token, uint256 _amount) internal {
+        if (IERC20(_token).allowance(_spender, address(this)) < _amount) {
+            IERC20(_token).approve(_spender, 0);
+            IERC20(_token).approve(_spender, _amount);
         }
     }
 
@@ -189,10 +184,18 @@ contract GrimFeeRecipientPOL is Ownable {
         emit Buyback((equalBB + ftmBB));
     }
 
-    function solidlyFtmToEvoBuyback() internal {
+    function solidlyFtmToEvoBuyback() public onlyAdmin {
         uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
         approvalCheck(solidlyRouter, wftm, wftmBal);
         uint256 ftmBB = ISolidlyRouter(solidlyRouter).swapExactTokensForTokensSimple(wftmBal, 0, wftm, grimEvo, false, address(this), block.timestamp)[4];
+        emit Buyback(ftmBB);
+    }
+
+    function uniFtmToEvoBuyback() public onlyAdmin {
+        uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
+        approvalCheck(unirouter, wftm, wftmBal);
+        uint256 ftmBB = UniRouter(unirouter).getAmountsOut(wftmBal, ftmToGrimEvoUniPath);
+        UniRouter(unirouter).swapExactTokensForTokensSupportingFeeOnTransferTokens(wftmBal, 1, ftmToGrimEvoUniPath, address(this), block.timestamp);
         emit Buyback(ftmBB);
     }
 
@@ -221,7 +224,7 @@ contract GrimFeeRecipientPOL is Ownable {
         ISolidlyRouter(solidlyRouter).swapExactTokensForTokens(tokenBal, 0, _path, address(this), block.timestamp);
     }
 
-    function addPOL(uint256 _evoAmount, uint256 _wftmAmount) external onlyAdmin {
+    function addEvoPOL(uint256 _evoAmount, uint256 _wftmAmount) external onlyAdmin {
         uint256 evoBal;
         uint256 wftmBal;
         uint256 lpBal;
@@ -229,7 +232,7 @@ contract GrimFeeRecipientPOL is Ownable {
             evoBal = IERC20(grimEvo).balanceOf(address(this));
         } else evoBal = _evoAmount;
         if(_wftmAmount == 0){
-            wftmBal = IERC20(grimEvo).balanceOf(address(this));
+            wftmBal = IERC20(wftm).balanceOf(address(this));
         } else wftmBal = _wftmAmount;
 
         approvalCheck(solidlyRouter, grimEvo, evoBal);
@@ -242,7 +245,7 @@ contract GrimFeeRecipientPOL is Ownable {
         emit AddPOL(lpBal);
     }
 
-    function subPOL(uint256 _receipt) external onlyAdmin {
+    function subEvoPOL(uint256 _receipt) public onlyAdmin {
         uint256 receiptBal;
         uint256 liquidity;
         if(_receipt == 0){
@@ -252,6 +255,7 @@ contract GrimFeeRecipientPOL is Ownable {
         IGrimVaultV2(evoVault).withdraw(receiptBal);
         liquidity = IERC20(evoLP).balanceOf(address(this));
         ISolidlyRouter(solidlyRouter).removeLiquidity(grimEvo, wftm, false, liquidity, 1, 1, address(this), block.timestamp);
+        emit SubPOL(liquidity);
     }
 
     //veNFT//
@@ -283,6 +287,7 @@ contract GrimFeeRecipientPOL is Ownable {
 
     function vote(address[] memory _pools, int256[] memory _weights) external onlyAdmin {
         IVoter(voter).vote(0, _pools, _weights);
+        lastVote = block.timestamp;
         emit Vote(_pools, _weights, block.timestamp);
     }
 
@@ -303,6 +308,7 @@ contract GrimFeeRecipientPOL is Ownable {
         }
 
         IBribe(bribeContract).notifyRewardAmount(grimEvo, evoBal);
+        lastBribe = block.timestamp;
         emit EvoBribe(grimEvo, evoBal, block.timestamp);
     }
 
@@ -329,18 +335,26 @@ contract GrimFeeRecipientPOL is Ownable {
         if(t2Bal > 0){
             IBribe(bribeContract).notifyRewardAmount(_tokens[2], t2Bal);
         }
+        lastBribe = block.timestamp;
         emit MixedBribe(_tokens, tokenAmounts, block.timestamp);
     }
 
 
     //Migration
-    function exitToTreasury(address _veNFT, uint256 _id) external onlyOwner {
-        IERC721(_veNFT).safeTransferFrom(address(this), treasury, _id);
+    function exitToTreasury(uint256 _id) external onlyOwner {
+        IERC721(veToken).safeTransferFrom(address(this), treasury, _id);
         uint256 equalBal = IERC20(equal).balanceOf(address(this));
         uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
         uint256 evoBal = IERC20(grimEvo).balanceOf(address(this));
         uint256 stableBal = IERC20(stableToken).balanceOf(address(this));
+        uint256 receiptBal = IGrimVaultV2(evoVault).balanceOf(address(this));
 
+        if(receiptBal > 0){
+            subEvoPOL(receiptBal);
+            uint256 lpBal = IERC20(evoLP).balanceOf(address(this));
+            IERC20(evoLP).safeTransferFrom(address(this), treasury, lpBal);
+        }
+       
         if(equalBal > 0){
         IERC20(equal).safeTransferFrom(address(this), treasury, equalBal);
         }
@@ -356,14 +370,21 @@ contract GrimFeeRecipientPOL is Ownable {
         emit ExitToTreasury(_id);
     }
 
-    function exitToNewRecipient(address _veNFT, uint256 _id, address _newRecipient) external onlyOwner {
-        IERC721(_veNFT).approve(_newRecipient, _id);
-        IERC721(_veNFT).safeTransferFrom(address(this), _newRecipient, _id);
+    function exitToNewRecipient(uint256 _id, address _newRecipient) external onlyOwner {
+        IERC721(veToken).approve(_newRecipient, _id);
+        IERC721(veToken).safeTransferFrom(address(this), _newRecipient, _id);
         uint256 equalBal = IERC20(equal).balanceOf(address(this));
         uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
         uint256 evoBal = IERC20(grimEvo).balanceOf(address(this));
         uint256 stableBal = IERC20(stableToken).balanceOf(address(this));
+        uint256 receiptBal = IGrimVaultV2(evoVault).balanceOf(address(this));
 
+
+        if(receiptBal > 0){
+            subEvoPOL(receiptBal);
+            uint256 lpBal = IERC20(evoLP).balanceOf(address(this));
+            IERC20(evoLP).safeTransferFrom(address(this), _newRecipient, lpBal);
+        }
         if(equalBal > 0){
         approvalCheck(_newRecipient, equal, equalBal);
         IERC20(equal).safeTransferFrom(address(this), _newRecipient, equalBal);
@@ -384,7 +405,7 @@ contract GrimFeeRecipientPOL is Ownable {
 
     }
 
-    //Views
+    //Views//
     function lpBalance() external view returns(uint256 _bal){
         return IGrimVaultV2(evoVault).balanceOf(address(this));
     }
@@ -398,9 +419,7 @@ contract GrimFeeRecipientPOL is Ownable {
         return (evoBal, wftmBal, equalBal, stableBal);
     }
 
-
-
-   //Access control
+   //Access control//
     modifier onlyAdmin() {
         require(msg.sender == owner() || msg.sender == strategist);
         _;
