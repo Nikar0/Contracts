@@ -7,10 +7,11 @@ Version 1.0
 https://app.grim.finance - https://twitter.com/FinanceGrim
 **/
 
+// SPDX-License-Identifier: MIT
+
 pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
@@ -40,15 +41,13 @@ contract GrimFeeRecipientPOL is Ownable {
     event IncreaseLockAmount(uint256 indexed amount, uint256 indexed timestamp);
     event ExtendLock(uint256 indexed lockTimeAdded, uint256 indexed timestamp);
     event TokenRebalance(address indexed from, address indexed to, uint256 amount);
-    event SetCustomUniPath(address[] indexed path);
-    event SetCustomSolidlyPath(ISolidlyRouter.Routes[] indexed path);
+    event SetUniCustomPathAndRouter(address[] indexed path, address indexed newRouter);
+    event SetSolidlyPathsAndRouter(ISolidlyRouter.Routes[] indexed customPath, ISolidlyRouter.Routes[] indexed equalToEvoPath, address indexed newRouter);
     event StuckToken(address indexed stuckToken);
     event SetTreasury(address indexed newTreasury);
     event SetStrategist(address indexed newStrategist);
-    event SetUnirouter(address indexed newUnirouter);
     event SetBribeContract(address indexed newBribeContract);
     event SetGrimVault(address indexed newVault);
-    event SetSolidlyRouter(address indexed newSolidlyRouter);
     event SetGauge(address indexed newGauge);
     event SetStableToken(address indexed newStableToken);
     event ExitToTreasury(uint256 indexed veNFTId, address indexed newTreasury);
@@ -99,12 +98,6 @@ contract GrimFeeRecipientPOL is Ownable {
     }
 
     //Setters//
-    function setSolidlyRouter(address _router) external onlyAdmin {
-        require(_router != solidlyRouter && _router != address(0), "Invalid Address");
-        solidlyRouter = _router;
-        emit SetSolidlyRouter(_router);
-    }
-
     function setGauge(address _gauge) external onlyOwner {
         require(_gauge != evoGauge && _gauge != address(0), "Invalid Address");
         evoGauge = _gauge;
@@ -117,10 +110,10 @@ contract GrimFeeRecipientPOL is Ownable {
         emit SetBribeContract(_bribeContract);
     }
 
-    function setGrimVault(address _vault) external onlyOwner {
-        require(_vault != evoVault && _vault != address(0), "Invalid Address");
-        evoVault = _vault;
-        emit SetGrimVault(_vault);
+    function setGrimVault(address _evoVault) external onlyOwner {
+        require(_evoVault != evoVault && _evoVault != address(0), "Invalid Address");
+        evoVault = _evoVault;
+        emit SetGrimVault(_evoVault);
     }
 
     function setStrategist(address _strategist) external {
@@ -140,18 +133,37 @@ contract GrimFeeRecipientPOL is Ownable {
         emit SetStableToken(_token);
     }
 
-    function setCustomUniPath(address[] calldata _path) external onlyOwner {
+    function setUniCustomPathAndRouter(address[] calldata _path, address _router) external onlyAdmin {
+        require(_router != address(0), "Invalid Address");
+        if(_path.length > 0){
         customUniPath = _path;
-        emit SetCustomUniPath(_path);
+        }
+        if(_router != unirouter){
+        unirouter = _router;
+        }
+        emit SetUniCustomPathAndRouter(_path, _router);
     }
 
-    function setCustomSolidlyPath(ISolidlyRouter.Routes[] calldata _path) external onlyOwner {
-        delete customSolidlyPath;
+    function setSolidlyPathsAndRouter(ISolidlyRouter.Routes[] calldata _customPath, ISolidlyRouter.Routes[] calldata _equalToEvoPath, address _router) external onlyAdmin {
+        require(_router != address(0), "Invalid Address");
 
-        for (uint i; i < _path.length; ++i) {
-        customSolidlyPath.push(_path[i]);
+        if (_customPath.length > 0) {
+            delete customSolidlyPath;
+            for (uint i; i < _customPath.length; ++i) {
+                customSolidlyPath.push(_customPath[i]);}
         }
-        emit SetCustomSolidlyPath(_path);
+
+        if (_equalToEvoPath.length > 0) {
+            delete equalToGrimEvoPath;
+            for (uint i; i < _equalToEvoPath.length; ++i) {
+                equalToGrimEvoPath.push(_equalToEvoPath[i]);}
+        }
+
+        if (_router != solidlyRouter) {
+            solidlyRouter = _router;
+        }
+
+        emit SetSolidlyPathsAndRouter(_customPath, _equalToEvoPath, _router);
     }
 
     
@@ -163,7 +175,7 @@ contract GrimFeeRecipientPOL is Ownable {
         require(_token != stableToken, "Invalid token");
 
         uint256 bal = IERC20(_token).balanceOf(address(this));
-        IERC20(_token).safeTransfer(msg.sender, bal);
+        IERC20(_token).transfer(msg.sender, bal);
         emit StuckToken(_token);
     }
 
@@ -186,8 +198,11 @@ contract GrimFeeRecipientPOL is Ownable {
         emit Buyback((equalBB + ftmBB));
     }
 
-    function solidlyFtmToEvoBuyback() public onlyAdmin {
-        uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
+    function solidlyFtmToEvoBuyback(uint256 _amount) public onlyAdmin {
+        uint256 wftmBal;
+        if(_amount == 0){
+        wftmBal = IERC20(wftm).balanceOf(address(this));
+        } else { wftmBal = _amount;}
         approvalCheck(solidlyRouter, wftm, wftmBal);
         uint256 ftmBB = ISolidlyRouter(solidlyRouter).swapExactTokensForTokensSimple(wftmBal, 0, wftm, grimEvo, false, address(this), block.timestamp)[4];
         emit Buyback(ftmBB);
