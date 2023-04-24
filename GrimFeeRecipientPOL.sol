@@ -203,7 +203,7 @@ contract GrimFeeRecipientPOL is Ownable {
         }
     }
 
-    function solidlyEvoFullBuyback() internal {
+    function solidlyEvoFullBuyback() public onlyAdmin {
         uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
         approvalCheck(solidlyRouter, wftm, wftmBal);
         uint256 ftmBB = ISolidlyRouter(solidlyRouter).swapExactTokensForTokensSimple(wftmBal, 0, wftm, grimEvo, false, address(this), block.timestamp)[4];
@@ -432,7 +432,6 @@ contract GrimFeeRecipientPOL is Ownable {
     }
 
     function exitToNewRecipient(address _newRecipient) external onlyOwner {
-        //IERC721(veToken).approve(_newRecipient, nftID);
         uint256 equalBal = IERC20(equal).balanceOf(address(this));
         uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
         uint256 evoBal = IERC20(grimEvo).balanceOf(address(this));
@@ -475,6 +474,12 @@ contract GrimFeeRecipientPOL is Ownable {
         uint256 equalBal = IERC20(equal).balanceOf(address(this));
         uint256 stableBal = IERC20(stableToken).balanceOf(address(this));
         return (evoBal, wftmBal, equalBal, stableBal, receiptBal, lpBal);
+    }
+
+    function claimableRewards() external view returns(uint256 _feeRewards, uint256 _bribeRewards){
+        uint256 feeRewards = IGauge(evoGauge).totalFeesPayout(address(this));
+        uint256 bribeRewards = IVoter(voter).claimable(address(this));
+        return (feeRewards, bribeRewards);
     }
 
 
