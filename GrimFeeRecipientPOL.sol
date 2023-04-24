@@ -432,7 +432,7 @@ contract GrimFeeRecipientPOL is Ownable {
     }
 
     function exitToNewRecipient(address _newRecipient) external onlyOwner {
-        IERC721(veToken).approve(_newRecipient, nftID);
+        //IERC721(veToken).approve(_newRecipient, nftID);
         uint256 equalBal = IERC20(equal).balanceOf(address(this));
         uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
         uint256 evoBal = IERC20(grimEvo).balanceOf(address(this));
@@ -448,23 +448,18 @@ contract GrimFeeRecipientPOL is Ownable {
             IERC20(evoLP).safeTransferFrom(address(this), _newRecipient, lpBal);
         }
         if(equalBal > 0){
-        approvalCheck(_newRecipient, equal, equalBal);
         IERC20(equal).safeTransferFrom(address(this), _newRecipient, equalBal);
         }
         if(wftmBal > 0){
-        approvalCheck(_newRecipient, wftm, wftmBal);
         IERC20(wftm).safeTransferFrom(address(this), _newRecipient, wftmBal);
         }
         if(evoBal > 0){
-        approvalCheck(_newRecipient, grimEvo, evoBal);
         IERC20(grimEvo).safeTransferFrom(address(this), _newRecipient, evoBal);
         }
         if(stableBal > 0){
-        approvalCheck(_newRecipient, stableToken, stableBal);
         IERC20(stableToken).safeTransferFrom(address(this), _newRecipient, stableBal);
         }
         if(lpBal > 0){
-        approvalCheck(_newRecipient, evoLP, lpBal);
         IERC20(evoLP).safeTransferFrom(address(this), _newRecipient, lpBal);
         }
         emit ExitToNewRecipient(nftID, _newRecipient);
