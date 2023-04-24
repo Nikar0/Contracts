@@ -40,6 +40,7 @@ contract GrimFeeRecipientPOL is Ownable {
     event CreateLock(uint256 indexed amount, uint256 indexed timestamp);
     event IncreaseLockAmount(uint256 indexed amount, uint256 indexed timestamp);
     event ExtendLock(uint256 indexed lockTimeAdded, uint256 indexed timestamp);
+    event NftIdInUse(uint256 indexed id);
     event TokenRebalance(address indexed from, address indexed to, uint256 amount);
     event SetUniCustomPathAndRouter(address[] indexed path, address indexed newRouter);
     event SetSolidlyPathsAndRouter(ISolidlyRouter.Routes[] indexed customPath, ISolidlyRouter.Routes[] indexed equalToEvoPath, address indexed newRouter);
@@ -58,6 +59,8 @@ contract GrimFeeRecipientPOL is Ownable {
     address public constant grimEvo = address(0x0a77866C01429941BFC7854c0c0675dB1015218b);
     address public constant equal = address(0x3Fd3A0c85B70754eFc07aC9Ac0cbBDCe664865A6);
     address public stableToken = address(0x04068DA6C83AFCFA0e13ba15A6696662335D5B75);
+    address public veToken = address(0x8313f3551C4D3984FfbaDFb42f780D0c8763Ce94);
+
 
 
     //Protocol Addresses//
@@ -65,11 +68,10 @@ contract GrimFeeRecipientPOL is Ownable {
     address public treasury = address(0xfAE236b4E261278C2B84e74b4631cf7BCAFca06d);
     address public strategist;
 
-    //3rd party Addresses//
+    //3rd Party Addresses//
     address public evoGauge = address(0x615C5795341AaABA1DE2E416096AF9bF0748Ea36);
     address public bribeContract = address(0x18EB9dAdbA5EAB20b16cfC0DD90a92AF303477B1);
     address public evoLP = address(0x5462F8c029ab3461d1784cE8B6F6004f6F6E2Fd4);
-    address public veToken = address(0x8313f3551C4D3984FfbaDFb42f780D0c8763Ce94);
     address public voter = address(0x4bebEB8188aEF8287f9a7d1E4f01d76cBE060d5b);
     address public solidlyRouter = address(0x1A05EB736873485655F29a37DEf8a0AA87F5a447);
     address public unirouter;
@@ -81,6 +83,7 @@ contract GrimFeeRecipientPOL is Ownable {
     ISolidlyRouter.Routes[] public customSolidlyPath;
 
     //Record keeping//
+    uint256 public nftID;
     uint256 public lastVote;
     uint256 public lastBribe;
     
@@ -164,6 +167,12 @@ contract GrimFeeRecipientPOL is Ownable {
         }
 
         emit SetSolidlyPathsAndRouter(_customPath, _equalToEvoPath, _router);
+    }
+
+    function setNftId(uint256 _id) external onlyAdmin {
+        require(IVeToken(veToken).ownerOf(_id) == address(this), "!Invalid ID");
+        nftID = _id;
+        emit NftIdInUse(_id);
     }
 
     
@@ -290,26 +299,26 @@ contract GrimFeeRecipientPOL is Ownable {
     function addToLockAmount(uint256 _amount) external onlyAdmin {
         if(_amount == 0){
             uint256 lockBal = IERC20(equal).balanceOf(address(this));
-            IVeToken(veToken).increase_amount(0, lockBal);
+            IVeToken(veToken).increase_amount(nftID, lockBal);
             emit IncreaseLockAmount(_amount, block.timestamp);
         } else {
-            IVeToken(veToken).increase_amount(0, _amount);
+            IVeToken(veToken).increase_amount(nftID, _amount);
             emit IncreaseLockAmount(_amount, block.timestamp);}  
     }
 
     function addToLockDuration(uint256 _timeAdded) external onlyAdmin {
-        IVeToken(veToken).increase_unlock_time(0, _timeAdded);
+        IVeToken(veToken).increase_unlock_time(nftID, _timeAdded);
         emit ExtendLock(_timeAdded, block.timestamp);
     }
 
     function vote(address[] memory _pools, int256[] memory _weights) external onlyAdmin {
-        IVoter(voter).vote(0, _pools, _weights);
+        IVoter(voter).vote(nftID, _pools, _weights);
         lastVote = block.timestamp;
         emit Vote(_pools, _weights, block.timestamp);
     }
 
-    function releaseNFT(uint256 _veNftId) external onlyOwner {
-        IVeToken(veToken).withdraw(_veNftId);
+    function releaseNFT() external onlyOwner {
+        IVeToken(veToken).withdraw(nftID);
     }
 
 
