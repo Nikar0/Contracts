@@ -42,11 +42,12 @@ contract GrimFeeRecipientPOL is Ownable {
     event AddLockTime(uint256 indexed lockTimeAdded, uint256 indexed timestamp);
     event NftIDInUse(uint256 indexed id);
     event TokenRebalance(address indexed from, address indexed to, uint256 amount);
-    event SetUniCustomPathAndRouter(address[] indexed path, address indexed newRouter);
+    event SetUniPathsAndRouter(address[] indexed custompath, address[] indexed ftmToEvoPath, address indexed newRouter);
     event SetSolidlyPathsAndRouter(ISolidlyRouter.Routes[] indexed customPath, ISolidlyRouter.Routes[] indexed equalToEvoPath, address indexed newRouter);
     event StuckToken(address indexed stuckToken);
     event SetTreasury(address indexed newTreasury);
     event SetStrategist(address indexed newStrategist);
+    event SetVeDist(address indexed newVeDist);
     event SetBribeContract(address indexed newBribeContract);
     event SetGrimVault(address indexed newVault);
     event SetGauge(address indexed newGauge);
@@ -71,6 +72,7 @@ contract GrimFeeRecipientPOL is Ownable {
     address public bribeContract = address(0x18EB9dAdbA5EAB20b16cfC0DD90a92AF303477B1);
     address public evoLP = address(0x5462F8c029ab3461d1784cE8B6F6004f6F6E2Fd4);
     address public voter = address(0x4bebEB8188aEF8287f9a7d1E4f01d76cBE060d5b);
+    address public veDist = address(0x07378e3B1fC43F7A37630C739a2f29F5b2442e60);
     address public solidlyRouter = address(0x1A05EB736873485655F29a37DEf8a0AA87F5a447);
     address public unirouter;
     
@@ -110,6 +112,12 @@ contract GrimFeeRecipientPOL is Ownable {
         emit SetBribeContract(_bribeContract);
     }
 
+    function setVeDist(address _veDist) external onlyOwner {
+        require(_veDist != veDist && _veDist != address(0), "Invalid Address");
+        veDist = _veDist;
+        emit SetVeDist(_veDist);
+    }
+
     function setGrimVault(address _evoVault) external onlyOwner {
         require(_evoVault != evoVault && _evoVault != address(0), "Invalid Address");
         evoVault = _evoVault;
@@ -133,15 +141,18 @@ contract GrimFeeRecipientPOL is Ownable {
         emit SetStableToken(_token);
     }
 
-    function setUniCustomPathAndRouter(address[] calldata _path, address _router) external onlyAdmin {
+    function setUniPathsAndRouter(address[] calldata _custompath, address[] calldata _ftmToEvoPath, address _router) external onlyAdmin {
         require(_router != address(0), "Invalid Address");
-        if(_path.length > 0){
-        customUniPath = _path;
+        if(_custompath.length > 0){
+        customUniPath = _custompath;
+        }
+        if(_ftmToEvoPath.length > 0){
+        ftmToGrimEvoUniPath = _ftmToEvoPath;
         }
         if(_router != unirouter){
         unirouter = _router;
         }
-        emit SetUniCustomPathAndRouter(_path, _router);
+        emit SetUniPathsAndRouter(customUniPath, ftmToGrimEvoUniPath, unirouter);
     }
 
     function setSolidlyPathsAndRouter(ISolidlyRouter.Routes[] calldata _customPath, ISolidlyRouter.Routes[] calldata _equalToEvoPath, address _router) external onlyAdmin {
@@ -163,13 +174,13 @@ contract GrimFeeRecipientPOL is Ownable {
             solidlyRouter = _router;
         }
 
-        emit SetSolidlyPathsAndRouter(_customPath, _equalToEvoPath, _router);
+        emit SetSolidlyPathsAndRouter(customSolidlyPath, equalToGrimEvoPath, solidlyRouter);
     }
 
     function setNftId(uint256 _id) external onlyAdmin {
         require(IVeToken(veToken).ownerOf(_id) == address(this), "!Invalid ID");
         nftID = _id;
-        emit NftIDInUse(_id);
+        emit NftIDInUse(nftID);
     }
 
     
@@ -234,6 +245,16 @@ contract GrimFeeRecipientPOL is Ownable {
             approvalCheck(solidlyRouter, _tokenFrom, _amount);
             ISolidlyRouter(solidlyRouter).swapExactTokensForTokensSimple(_amount, 0, _tokenFrom, _tokenTo, false, address(this), block.timestamp);
             emit PolRebalance(_tokenFrom, _tokenTo, _amount);
+        }
+    }
+
+    function claimVeRewards() external onlyAdmin{
+        if(IVeDist(veDist).claimable(nftID) > 0){
+            IVeDist(veDist).claim(nftID);
+        }
+
+        if(IGauge(evoGauge).totalFeesPayout(address(this)) > 0 ){
+            IGauge(evoGauge).claimFees();
         }
     }
 
