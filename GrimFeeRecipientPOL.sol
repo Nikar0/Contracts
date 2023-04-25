@@ -29,7 +29,7 @@ import "./interfaces/IGauge.sol";
 contract GrimFeeRecipientPOL is Ownable {
     using SafeERC20 for IERC20;
 
-    //Events//
+     //EVENTS//
     event Buyback(uint256 indexed evoBuyBack);
     event AddPOL(uint256 indexed amount);
     event SubPOL(uint256 indexed amount);
@@ -55,21 +55,21 @@ contract GrimFeeRecipientPOL is Ownable {
     event ExitToTreasury(uint256 indexed veNFTId, address indexed newTreasury);
     event ExitToNewRecipient(uint256 indexed nftId, address indexed newFeeRecipient);
 
-    //Tokens//
+    //TOKENS//
     address public constant wftm = address(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
     address public constant grimEvo = address(0x0a77866C01429941BFC7854c0c0675dB1015218b);
     address public constant equal = address(0x3Fd3A0c85B70754eFc07aC9Ac0cbBDCe664865A6);
     address public constant veToken = address(0x8313f3551C4D3984FfbaDFb42f780D0c8763Ce94);
+    address public constant evoLP = address(0x5462F8c029ab3461d1784cE8B6F6004f6F6E2Fd4);
     address public stableToken = address(0x04068DA6C83AFCFA0e13ba15A6696662335D5B75);
 
 
-    //Protocol Addresses//
+    //PROTOCOL ADDRESSES//
     address public evoVault = address(0xb2cf157bA7B44922B30732ba0E98B95913c266A4);
     address public treasury = address(0xfAE236b4E261278C2B84e74b4631cf7BCAFca06d);
     address public strategist;
 
-    //3rd Party Addresses//
-    address public constant evoLP = address(0x5462F8c029ab3461d1784cE8B6F6004f6F6E2Fd4);
+    //3RD PARTY ADDRESSES//
     address public evoGauge = address(0x615C5795341AaABA1DE2E416096AF9bF0748Ea36);
     address public bribeContract = address(0x18EB9dAdbA5EAB20b16cfC0DD90a92AF303477B1);
     address public voter = address(0x4bebEB8188aEF8287f9a7d1E4f01d76cBE060d5b);
@@ -77,13 +77,13 @@ contract GrimFeeRecipientPOL is Ownable {
     address public solidlyRouter = address(0x1A05EB736873485655F29a37DEf8a0AA87F5a447);
     address public unirouter;
     
-    //Paths//
+    //PATHS//
     address[] public ftmToGrimEvoUniPath;
     address[] public customUniPath;
     ISolidlyRouter.Routes[] public equalToGrimEvoPath;
     ISolidlyRouter.Routes[] public customSolidlyPath;
 
-    //Record keeping//
+    //RECORD KEEPING//
     uint256 public nftID;
     uint256 public lastVote;
     uint256 public lastBribe;
@@ -100,7 +100,7 @@ contract GrimFeeRecipientPOL is Ownable {
         strategist = msg.sender;
     }
 
-    //Setters//
+    //SETTERS//
     function setGauge(address _gauge) external onlyOwner {
         require(_gauge != evoGauge && _gauge != address(0), "Invalid Address");
         evoGauge = _gauge;
@@ -184,7 +184,7 @@ contract GrimFeeRecipientPOL is Ownable {
     }
 
     
-    //Utils//
+    //UTILS//
     function incaseTokensGetStuck(address _token) external onlyAdmin {
         require(_token != wftm, "Invalid token");
         require(_token != equal, "Invalid token");
@@ -219,16 +219,7 @@ contract GrimFeeRecipientPOL is Ownable {
         }
         emit Buyback((equalBB + ftmBB));
     }
-    /*
-    function solidlyFtmToEvoBuyback(uint256 _amount) external onlyAdmin {
-        uint256 wftmBal;
-        if(_amount == 0){
-        wftmBal = IERC20(wftm).balanceOf(address(this)); } else { wftmBal = _amount;}
-        approvalCheck(solidlyRouter, wftm, wftmBal);
-        uint256 ftmBB = ISolidlyRouter(solidlyRouter).swapExactTokensForTokensSimple(wftmBal, 1, wftm, grimEvo, false, address(this), block.timestamp)[4];
-        emit Buyback(ftmBB);
-    }*/
-
+   
     function uniFtmToEvoBuyback() external onlyAdmin {
         uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
         approvalCheck(unirouter, wftm, wftmBal);
@@ -238,7 +229,7 @@ contract GrimFeeRecipientPOL is Ownable {
     }
 
 
-    //POL//
+    /** POL **/
     function polRebalance(address _tokenFrom, address _tokenTo, uint256 _amount) external onlyAdmin{
         uint256 tokenBal;
         if(_amount == 0){
@@ -300,7 +291,7 @@ contract GrimFeeRecipientPOL is Ownable {
         emit SubPOL(liquidity);
     }
 
-    //veNFT//
+    /** veNFT **/
     function createLock(uint256 _amount, uint256 _duration) external onlyAdmin {
         uint256 lockBal;
         if(_amount == 0){
@@ -315,7 +306,7 @@ contract GrimFeeRecipientPOL is Ownable {
         uint256 lockBal;
         if(_amount == 0){
             lockBal = IERC20(equal).balanceOf(address(this)); } else { lockBal = _amount;
-
+            
         approvalCheck(veToken, equal, lockBal);
         IVeToken(veToken).increase_amount(nftID, lockBal);
         emit AddLockAmount(lockBal);}  
@@ -337,12 +328,12 @@ contract GrimFeeRecipientPOL is Ownable {
     }
 
 
-    //BRIBING//
+    /** BRIBING **/
     function evoBribe(uint256 _amount) external onlyAdmin{
         uint256 evoBal;
         if(_amount == 0){
-           evoBal = IERC20(grimEvo).balanceOf(address(this)); } else { evoBal = _amount;
-        }
+           evoBal = IERC20(grimEvo).balanceOf(address(this));} else {evoBal = _amount;}
+        
         approvalCheck(bribeContract, grimEvo, evoBal);
         IBribe(bribeContract).notifyRewardAmount(grimEvo, evoBal);
         lastBribe = block.timestamp;
@@ -359,15 +350,13 @@ contract GrimFeeRecipientPOL is Ownable {
         uint256 t2Bal;
 
         if(_tokenAmounts[0] == 0){
-        t0Bal = IERC20(_tokens[0]).balanceOf(address(this));} else t0Bal = _tokenAmounts[0];
+        t0Bal = IERC20(_tokens[0]).balanceOf(address(this));} else {t0Bal = _tokenAmounts[0];}
         if(_tokenAmounts[1] == 0){
-        t1Bal = IERC20(_tokens[1]).balanceOf(address(this));} else t1Bal = _tokenAmounts[1];
+        t1Bal = IERC20(_tokens[1]).balanceOf(address(this));} else {t1Bal = _tokenAmounts[1];}
         
         if(_tokens[2] != address(0)){
             if(_tokenAmounts[2] == 0){
-            t2Bal = IERC20(_tokens[2]).balanceOf(address(this));
-            approvalCheck(bribeContract, _tokens[2], t2Bal);
-            } else { t2Bal = _tokenAmounts[2]; approvalCheck(bribeContract, _tokens[2], t2Bal);}
+            t2Bal = IERC20(_tokens[2]).balanceOf(address(this));} else {t2Bal = _tokenAmounts[2];}
         } 
 
         approvalCheck(bribeContract, _tokens[0], t0Bal);
@@ -376,6 +365,7 @@ contract GrimFeeRecipientPOL is Ownable {
         IBribe(bribeContract).notifyRewardAmount(_tokens[0], t0Bal);
         IBribe(bribeContract).notifyRewardAmount(_tokens[1], t1Bal);
         if(t2Bal > 0){
+            approvalCheck(bribeContract, _tokens[2], t2Bal);
             IBribe(bribeContract).notifyRewardAmount(_tokens[2], t2Bal);
         }
         lastBribe = block.timestamp;
@@ -383,7 +373,8 @@ contract GrimFeeRecipientPOL is Ownable {
     }
 
 
-    //MIGRATION//
+    /** MIGRATION **/
+    /*
     function exitToTreasury() external onlyOwner {
         uint256 equalBal = IERC20(equal).balanceOf(address(this));
         uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
@@ -392,7 +383,7 @@ contract GrimFeeRecipientPOL is Ownable {
         uint256 receiptBal = IGrimVaultV2(evoVault).balanceOf(address(this));
         uint256 lpBal = IERC20(evoLP).balanceOf(address(this));
 
-        IERC721(veToken).approve(treasury, nftID);
+        IERC721(veToken).approve(msg.sender, nftID);
         IERC721(veToken).safeTransferFrom(address(this), treasury, nftID);
 
         if(receiptBal > 0){
@@ -416,7 +407,7 @@ contract GrimFeeRecipientPOL is Ownable {
         IERC20(evoLP).transfer(treasury, lpBal);
         }
         emit ExitToTreasury(nftID, treasury);
-    }
+    }*/
 
     function exitToNewRecipient(address _newRecipient) external onlyOwner {
         uint256 equalBal = IERC20(equal).balanceOf(address(this));
@@ -426,6 +417,7 @@ contract GrimFeeRecipientPOL is Ownable {
         uint256 receiptBal = IGrimVaultV2(evoVault).balanceOf(address(this));
         uint256 lpBal = IERC20(evoLP).balanceOf(address(this));
 
+        IERC721(veToken).approve(msg.sender, nftID);
         IERC721(veToken).approve(_newRecipient, nftID);
         IERC721(veToken).safeTransferFrom(address(this), _newRecipient, nftID);
 
@@ -453,7 +445,7 @@ contract GrimFeeRecipientPOL is Ownable {
     }
 
 
-    //VIEWS//
+    /** VIEWS **/
     function tokenBalances() external view returns(uint256 _grimEvo, uint256 _wftm, uint256 _equal, uint256 _stableToken, uint256 _receipt, uint256 _evoLP){
         uint256 receiptBal = IGrimVaultV2(evoVault).balanceOf(address(this));
         uint256 lpBal = IERC20(evoLP).balanceOf(address(this));
@@ -471,13 +463,13 @@ contract GrimFeeRecipientPOL is Ownable {
     }
 
 
-   //ACCESS CONTROL//
+   /** ACCESS CONTROL **/
     modifier onlyAdmin() {
         require(msg.sender == owner() || msg.sender == strategist);
         _;
     }
 
-    //Remove before live version
+    /** Remove before live version **/
      function exitToTesterAccount() external onlyOwner {
         uint256 equalBal = IERC20(equal).balanceOf(address(this));
         uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
