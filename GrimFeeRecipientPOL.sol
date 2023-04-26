@@ -29,7 +29,7 @@ import "./interfaces/IGauge.sol";
 contract GrimFeeRecipientPOL is Ownable {
     using SafeERC20 for IERC20;
 
-     //EVENTS//
+    //EVENTS//
     event Buyback(uint256 indexed evoBuyBack);
     event AddPOL(uint256 indexed amount);
     event SubPOL(uint256 indexed amount);
@@ -74,7 +74,7 @@ contract GrimFeeRecipientPOL is Ownable {
     address public bribeContract = address(0x18EB9dAdbA5EAB20b16cfC0DD90a92AF303477B1);
     address public voter = address(0x4bebEB8188aEF8287f9a7d1E4f01d76cBE060d5b);
     address public veDist = address(0x07378e3B1fC43F7A37630C739a2f29F5b2442e60);
-    address public solidlyRouter = address(0x1A05EB736873485655F29a37DEf8a0AA87F5a447);
+    address public solidlyRouter = address(0x2aa07920E4ecb4ea8C801D9DFEce63875623B285);
     address public unirouter;
     
     //PATHS//
@@ -241,13 +241,8 @@ contract GrimFeeRecipientPOL is Ownable {
 
     }
 
-    function claimVeRewards() external onlyAdmin{
-        if(IVeDist(veDist).claimable(nftID) > 0){
-            IVeDist(veDist).claim(nftID);
-        }
-        if(IGauge(evoGauge).totalFeesPayout(address(this)) > 0 ){
-            IGauge(evoGauge).claimFees();
-        }
+    function claimVeRewards(address[] calldata _tokens) external onlyAdmin{
+      
     }
 
     function swapClaimable(address _tokenFrom, ISolidlyRouter.Routes[] calldata _path, uint256 _amount) external onlyAdmin{
@@ -306,7 +301,7 @@ contract GrimFeeRecipientPOL is Ownable {
         uint256 lockBal;
         if(_amount == 0){
             lockBal = IERC20(equal).balanceOf(address(this)); } else { lockBal = _amount;
-            
+
         approvalCheck(veToken, equal, lockBal);
         IVeToken(veToken).increase_amount(nftID, lockBal);
         emit AddLockAmount(lockBal);}  
@@ -456,10 +451,17 @@ contract GrimFeeRecipientPOL is Ownable {
         return (evoBal, wftmBal, equalBal, stableBal, receiptBal, lpBal);
     }
 
-    function claimableRewards() external view returns(uint256 _feeRewards, uint256 _bribeRewards){
-        uint256 feeRewards = IGauge(evoGauge).totalFeesPayout(address(this));
-        uint256 bribeRewards = IVoter(voter).claimable(address(this));
-        return (feeRewards, bribeRewards);
+    function claimableRewards(address[] calldata _tokens) external view returns (address[] memory, uint256[] memory) {
+       address[] memory tokenAddresses = new address[](_tokens.length);
+       uint256[] memory tokenRewards = new uint256[](_tokens.length);
+       uint256 earned; 
+        
+        for (uint i = 0; i < _tokens.length; i++) {
+            earned = IBribe(bribeContract).earned(_tokens[i], nftID);
+            tokenAddresses[i] = _tokens[i];
+            tokenRewards[i] = earned;
+        }
+        return (tokenAddresses, tokenRewards);
     }
 
 
