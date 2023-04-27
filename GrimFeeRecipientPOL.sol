@@ -23,9 +23,8 @@ import "./interfaces/IRecipient.sol";
 import "./interfaces/ISolidlyRouter.sol";
 import "./interfaces/IVoter.sol";
 import "./interfaces/IBribe.sol";
-import "./interfaces/IVeDist.sol";
 import "./interfaces/IVeToken.sol";
-import "./interfaces/IGauge.sol";
+import "./interfaces/IWETH.sol";
 
 contract GrimFeeRecipientPOL2 is Ownable {
     using SafeERC20 for IERC20;
@@ -42,16 +41,14 @@ contract GrimFeeRecipientPOL2 is Ownable {
     event AddLockAmount(uint256 indexed amount);
     event AddLockTime(uint256 indexed lockTimeAdded);
     event NftIDInUse(uint256 indexed id);
-    event SetUniPathsAndRouter(address[] indexed custompath, address[] indexed ftmToEvoPath, address indexed newRouter);
-    event SetSolidlyPathsAndRouter(ISolidlyRouter.Routes[] indexed customPath, ISolidlyRouter.Routes[] indexed equalToEvoPath, address indexed newRouter);
+    event SetUniCustomPathAndRouter(address[] indexed custompath, address indexed newRouter);
+    event SetSolidlyCustomPathAndRouter(ISolidlyRouter.Routes[] indexed customPath, address indexed newRouter);
     event StuckToken(address indexed stuckToken);
     event SetTreasury(address indexed newTreasury);
     event SetStrategist(address indexed newStrategist);
     event SetBribeContract(address indexed newBribeContract);
     event SetGrimVault(address indexed newVault);
-    event SetGauge(address indexed newGauge);
-    event SetStableToken(address indexed newStableToken);
-    event ExitToNewReceiver(uint256 indexed nftId, address indexed newFeeRecipient);
+    event ExitFromContract(uint256 indexed nftId, address indexed newFeeRecipient);
 
     /** TOKENS **/
     address public constant wftm = address(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
@@ -65,13 +62,11 @@ contract GrimFeeRecipientPOL2 is Ownable {
     /**PROTOCOL ADDRESSES **/
     address public evoVault = address(0xb2cf157bA7B44922B30732ba0E98B95913c266A4);
     address public treasury = address(0xfAE236b4E261278C2B84e74b4631cf7BCAFca06d);
-    address public strategist;
+    address private strategist;
 
     /** 3RD PARTY ADDRESSES **/
-    address public evoGauge = address(0x615C5795341AaABA1DE2E416096AF9bF0748Ea36);
     address public bribeContract = address(0x18EB9dAdbA5EAB20b16cfC0DD90a92AF303477B1);
     address public voter = address(0x4bebEB8188aEF8287f9a7d1E4f01d76cBE060d5b);
-    address public veDist = address(0x07378e3B1fC43F7A37630C739a2f29F5b2442e60);
     address public solidlyRouter = address(0x2aa07920E4ecb4ea8C801D9DFEce63875623B285);
     address public unirouter;
     
@@ -85,7 +80,7 @@ contract GrimFeeRecipientPOL2 is Ownable {
     //* RECORD KEEPING **/
     uint256 public nftID;
     uint256 public lastVote;
-    uint256 public lastBribe;
+    address[] public lastBribes;
     
     constructor ( 
         ISolidlyRouter.Routes[] memory _wftmToGrimEvoPath,
@@ -105,12 +100,6 @@ contract GrimFeeRecipientPOL2 is Ownable {
     }
 
     /** SETTERS **/
-    function setGauge(address _gauge) external onlyOwner {
-        require(_gauge != evoGauge && _gauge != address(0), "Invalid Address");
-        evoGauge = _gauge;
-        emit SetGauge(_gauge);
-    }
-
     function setBribeContract(address _bribeContract) external onlyOwner {
         require(_bribeContract != bribeContract && _bribeContract != address(0), "Invalid Address");
         bribeContract = _bribeContract;
@@ -138,7 +127,6 @@ contract GrimFeeRecipientPOL2 is Ownable {
     function setStableToken(address _token) external onlyAdmin{
         require(_token != stableToken && _token != address(0), "Invalid Address");
         stableToken = _token;
-        emit SetStableToken(_token);
     }
 
     function setNftId(uint256 _id) external onlyAdmin {
@@ -147,38 +135,29 @@ contract GrimFeeRecipientPOL2 is Ownable {
         emit NftIDInUse(nftID);
     }
 
-    function setUniPathsAndRouter(address[] calldata _custompath, address[] calldata _ftmToEvoPath, address _router) external onlyAdmin {
+    function setUniCustomPathsAndRouter(address[] calldata _custompath, address _router) external onlyAdmin {
         require(_router != address(0), "Invalid Address");
         if(_custompath.length > 0){
         customUniPath = _custompath;
         }
-        if(_ftmToEvoPath.length > 0){
-        ftmToGrimEvoUniPath = _ftmToEvoPath;
-        }
+      
         if(_router != unirouter){
         unirouter = _router;
         }
-        emit SetUniPathsAndRouter(customUniPath, ftmToGrimEvoUniPath, unirouter);
+        emit SetUniCustomPathAndRouter(customUniPath, unirouter);
     }
 
-    function setSolidlyPathsAndRouter(ISolidlyRouter.Routes[] calldata _customPath, ISolidlyRouter.Routes[] calldata _equalToEvoPath, address _router) external onlyAdmin {
+    function setSolidlyPathsAndRouter(ISolidlyRouter.Routes[] calldata _customPath, address _router) external onlyAdmin {
         require(_router != address(0), "Invalid Address");
         if (_customPath.length > 0) {
             delete customSolidlyPath;
             for (uint i; i < _customPath.length; ++i) {
                 customSolidlyPath.push(_customPath[i]);}
         }
-
-        if (_equalToEvoPath.length > 0) {
-            delete equalToGrimEvoPath;
-            for (uint i; i < _equalToEvoPath.length; ++i) {
-                equalToGrimEvoPath.push(_equalToEvoPath[i]);}
-        }
-
         if (_router != solidlyRouter) {
             solidlyRouter = _router;
         }
-        emit SetSolidlyPathsAndRouter(customSolidlyPath, equalToGrimEvoPath, solidlyRouter);
+        emit SetSolidlyCustomPathAndRouter(customSolidlyPath, solidlyRouter);
     }
 
 
@@ -224,7 +203,8 @@ contract GrimFeeRecipientPOL2 is Ownable {
         }
         emit Buyback((equalBB + ftmBB));
     }
-   
+
+    
     function uniFtmToEvoBuyback() external onlyAdmin {
         uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
         approvalCheck(unirouter, wftm, wftmBal);
@@ -275,6 +255,8 @@ contract GrimFeeRecipientPOL2 is Ownable {
 
         approvalCheck(solidlyRouter, evoLP, liquidity);
         ISolidlyRouter(solidlyRouter).removeLiquidity(grimEvo, wftm, false, liquidity, 1, 1, address(this), block.timestamp);
+        ISolidlyRouter(solidlyRouter).removeLiquidityETHSupportingFeeOnTransferTokens(grimEvo, false, liquidity, 1, 1, address(this), block.timestamp);
+        IWETH(wftm).deposit(address(this).balance);        
         emit SubPOL(liquidity);
     }
 
@@ -332,7 +314,8 @@ contract GrimFeeRecipientPOL2 is Ownable {
         emit AddLockTime(_timeAdded);
     }
 
-    function vote(address[] memory _pools, int256[] memory _weights) external onlyAdmin {
+    function vote(address[] calldata _pools, int256[] calldata _weights) external onlyAdmin {
+        lastBribes = _pools;
         IVoter(voter).vote(nftID, _pools, _weights);
         lastVote = block.timestamp;
         emit Vote(_pools, _weights);
@@ -340,6 +323,10 @@ contract GrimFeeRecipientPOL2 is Ownable {
 
     function unlockNFT() external onlyOwner {
         IVeToken(veToken).withdraw(nftID);
+    }
+
+    function claimRewards(address[][] calldata _tokens) external onlyAdmin {
+        IVoter(voter).claimBribes(lastBribes, _tokens, nftID);
     }
 
 
@@ -351,7 +338,6 @@ contract GrimFeeRecipientPOL2 is Ownable {
         
         approvalCheck(bribeContract, grimEvo, evoBal);
         IBribe(bribeContract).notifyRewardAmount(grimEvo, evoBal);
-        lastBribe = block.timestamp;
         emit EvoBribe(evoBal);
     }
 
@@ -383,16 +369,15 @@ contract GrimFeeRecipientPOL2 is Ownable {
             approvalCheck(bribeContract, _tokens[2], t2Bal);
             IBribe(bribeContract).notifyRewardAmount(_tokens[2], t2Bal);
         }
-        lastBribe = block.timestamp;
         emit MixedBribe(_tokens, _tokenAmounts);
     }
 
 
     /** MIGRATION **/
-    function exitToNewReceiver(address _receiver) external onlyOwner {
+    function exitFromContract(address _receiver) external onlyOwner {
         require(_receiver != address(0), "Invalid toAddress");
-        require(_receiver == treasury || IRecipient(_receiver).oldRecipient() == address(this));
-       
+        require(_receiver == treasury || IRecipient(_receiver).oldRecipient() == address(this), "Invalid toAddress");
+        IVeToken(veToken).reset();
         uint256 equalBal = IERC20(equal).balanceOf(address(this));
         uint256 wftmBal = IERC20(wftm).balanceOf(address(this));
         uint256 evoBal = IERC20(grimEvo).balanceOf(address(this));
@@ -424,7 +409,7 @@ contract GrimFeeRecipientPOL2 is Ownable {
         if(lpBal > 0){
         IERC20(evoLP).safeTransfer(_receiver, lpBal);
         }
-        emit ExitToNewReceiver(nftID, _receiver);
+        emit ExitFromContract(nftID, _receiver);
     }
 
 
@@ -457,6 +442,11 @@ contract GrimFeeRecipientPOL2 is Ownable {
     modifier onlyAdmin() {
         require(msg.sender == owner() || msg.sender == strategist);
         _;
+    }
+
+    // Receive native from tax supported remove liquidity
+    receive() external payable{
+        require(msg.sender == solidlyRouter || msg.sender == strategist || msg.sender == owner(), "Invalid Sender");
     }
 
 }
