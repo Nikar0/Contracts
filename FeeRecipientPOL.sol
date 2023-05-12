@@ -1,10 +1,9 @@
 /** 
-Grim Finance POL feeRecipient. Comptroller for veNFT, Bribing, Voting & POL management.
+POL feeRecipient. Comptroller for veNFT, Bribing, Voting & POL management.
 Version 1.0
 
-@author Nikar0 - https://www.github.com/nikar0 - https://twitter.com/Nikar0_
-
-https://app.grim.finance - https://twitter.com/FinanceGrim
+@author Nikar0 - 
+https://www.github.com/nikar0    @Nikar0_
 **/
 
 // SPDX-License-Identifier: MIT
@@ -26,7 +25,7 @@ import "./interfaces/IBribe.sol";
 import "./interfaces/IVeToken.sol";
 import "./interfaces/IWETH.sol";
 
-contract GrimFeeRecipientPOL2 is Ownable {
+contract FeeRecipientPOL is Ownable {
     using SafeERC20 for IERC20;
 
     /** EVENTS **/
