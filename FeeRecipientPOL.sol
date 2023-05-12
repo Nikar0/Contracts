@@ -2,8 +2,11 @@
 POL feeRecipient. Comptroller for veNFT, Bribing, Voting & POL management.
 Version 1.0
 
-@author Nikar0 - 
+@author Nikar0
 https://www.github.com/nikar0    @Nikar0_
+
+@notice - Usable with Solidly and UNI AMMs.
+Deployed on Fantom
 **/
 
 // SPDX-License-Identifier: MIT
@@ -16,7 +19,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "./interfaces/IGrimVaultV2.sol";
+import "./interfaces/IVault.sol";
 import "./interfaces/IUniRouter.sol";
 import "./interfaces/IRecipient.sol";
 import "./interfaces/ISolidlyRouter.sol";
@@ -33,7 +36,7 @@ contract FeeRecipientPOL is Ownable {
     event AddPOL(uint256 indexed amount);
     event SubPOL(uint256 indexed amount);
     event PolRebalance(address indexed from, uint256 indexed amount);
-    event EvoBribe(uint256 indexed amount);
+    event Bribe(uint256 indexed amount);
     event MixedBribe(address[] indexed tokens, uint256[] indexed amounts);
     event Vote(address[] indexed poolsVoted, int256[] indexed weights);
     event CreateLock(uint256 indexed amount);
@@ -46,22 +49,22 @@ contract FeeRecipientPOL is Ownable {
     event SetTreasury(address indexed newTreasury);
     event SetStrategist(address indexed newStrategist);
     event SetBribeContract(address indexed newBribeContract);
-    event SetGrimVault(address indexed newVault);
+    event SetVault(address indexed newVault);
     event ExitFromContract(uint256 indexed nftId, address indexed newFeeRecipient);
 
     /** TOKENS **/
     address public constant wftm = address(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
-    address public constant grimEvo = address(0x0a77866C01429941BFC7854c0c0675dB1015218b);
+    address public constant protocolToken = address(0x0a77866C01429941BFC7854c0c0675dB1015218b);
     address public constant equal = address(0x3Fd3A0c85B70754eFc07aC9Ac0cbBDCe664865A6);
     address public constant veToken = address(0x8313f3551C4D3984FfbaDFb42f780D0c8763Ce94);
-    address public constant evoLP = address(0x5462F8c029ab3461d1784cE8B6F6004f6F6E2Fd4);
+    address public constant LP = address(0x5462F8c029ab3461d1784cE8B6F6004f6F6E2Fd4);
     address public stableToken = address(0x04068DA6C83AFCFA0e13ba15A6696662335D5B75);
 
 
     /**PROTOCOL ADDRESSES **/
-    address public evoVault = address(0xb2cf157bA7B44922B30732ba0E98B95913c266A4);
+    address public vault = address(0xb2cf157bA7B44922B30732ba0E98B95913c266A4);
     address public treasury = address(0xfAE236b4E261278C2B84e74b4631cf7BCAFca06d);
-    address private strategist;
+    address internal strategist;
 
     /** 3RD PARTY ADDRESSES **/
     address public bribeContract = address(0x18EB9dAdbA5EAB20b16cfC0DD90a92AF303477B1);
@@ -70,10 +73,10 @@ contract FeeRecipientPOL is Ownable {
     address public unirouter;
     
     /** PATHS **/
-    address[] public ftmToGrimEvoUniPath;
+    address[] public ftmToProtocolTokenUniPath;
     address[] public customUniPath;
-    ISolidlyRouter.Routes[] public wftmToGrimEvoPath;
-    ISolidlyRouter.Routes[] public equalToGrimEvoPath;
+    ISolidlyRouter.Routes[] public wftmToProtocolTokenPath;
+    ISolidlyRouter.Routes[] public equalToProtocolTokenPath;
     ISolidlyRouter.Routes[] public customSolidlyPath;
 
     //* RECORD KEEPING **/
@@ -82,12 +85,12 @@ contract FeeRecipientPOL is Ownable {
     address[] public lastBribes;
     
     constructor ( 
-        ISolidlyRouter.Routes[] memory _wftmToGrimEvoPath,
-        ISolidlyRouter.Routes[] memory _equalToGrimEvoPath
+        ISolidlyRouter.Routes[] memory _wftmToProtocolTokenPath,
+        ISolidlyRouter.Routes[] memory _equalToProtocolTokenPath
     )  {
 
-        for (uint i; i < _equalToGrimEvoPath.length; ++i) {
-            equalToGrimEvoPath.push(_equalToGrimEvoPath[i]);
+        for (uint i; i < _equalToProtocolTokenPath.length; ++i) {
+            equalToProtocolTokenPath.push(_equalToProtocolTokenPath[i]);
         }
 
         for (uint i; i < _wftmToGrimEvoPath.length; ++i) {
